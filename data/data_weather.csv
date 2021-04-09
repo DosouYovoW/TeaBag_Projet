@@ -1,13 +1,13 @@
-Years;Months;Precipitations(mm);Temperatures(oC)
-2017;June;88,60;18,70
-2017;July;7,40;20,40
-2017;August;14,80;17,80
-2017;September;41,80;17,00
-2018;June;93,00;15,60
-2018;July;93,80;20,80
-2018;August;63,00;19,70
-2018;September;67,20;14,90
-10 Years average;June;117,40;16,50
-10 Years average;July;88,90;19,50
-10 Years average;August;92,50;18,70
-10 Years average;September;78,80;14,50
+Years;Months;Precipitations (mm);Temperatures (°C)
+2017;June;88,6;18,7
+2017;July;7,4;20,4
+2017;August;14,8;17,8
+2017;September;41,8;17
+2018;June;93;15,6
+2018;July;93,8;20,8
+2018;August;63;19,7
+2018;September;67,2;14,9
+10 Years average;June;117,4;16,5
+10 Years average;July;88,9;19,5
+10 Years average;August;92,5;18,7
+10 Years average;September;78,8;14,5
