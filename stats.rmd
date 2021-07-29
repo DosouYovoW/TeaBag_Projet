@@ -1,0 +1,1155 @@
+**Tea Bag Index to assess carbon decomposition rate in cranberry agroecosystems**
+
+*Wilfried Dossou-Yovo, Serge Étienne Parent, Noura Ziadi, Élizabeth Parent and Léon Étienne Parent*
+
+```{r}
+print(Sys.Date())
+```
+
+Table of content
+
+# Objective
+
+This notebook generates the results included in the manuscript *Organic matter decomposition kinetics in cranberry agroecosystem using the Tea Bag Index*. Two trials have been made, first one in 2017 (data_2017.csv) and the second in 2018 (data_2018.csv). Data set from trials are a collection of incubated tea bag weight, nitrogen, carbon and sulfur content, nitrogen type and doses on trials fields. The aim of this study was to assess carbon release rate in cranberry agroecosystems compared to other terrestrial ecosystems
+
+# Statistical questions
+
+his notebook will answer the following statistical questions.
+
+1.  What is the influence of nitrogen fertilization on TBI parameters (k and S)?
+2.  Where cranberry soils are placed among the axes of the *TBI*?
+3.  What is the fractal kinetics of litter matterials ?
+4.  What is the fractal kinetics of litter biochemical composition ?
+
+## Packages and Function
+
+### Packages
+
+We need package [plyr](https://www.rdocumentation.org/packages/plyr/versions/1.8.6) and [tidyverse](https://www.tidyverse.org/) for easy data manipulation. [tidyverse](https://www.tidyverse.org/) load a set of packages such as [dplyr](https://www.rdocumentation.org/packages/dplyr/versions/0.7.8) for data manipulation and [ggplot2](https://www.rdocumentation.org/packages/ggplot2/versions/3.2.1) for data visualization. A set of other packages is used: [nlme](https://www.rdocumentation.org/packages/nlme/versions/3.1-143/topics/nlme) for fitting nonlinear mixed-effects models, the [broom](https://www.rdocumentation.org/packages/broom/versions/0.7.0) package summarises model outputs in a "tidy" way, [e1071](https://www.rdocumentation.org/packages/e1071/versions/1.7-3) to test distributions, [ggmap](https://www.rdocumentation.org/packages/ggmap/versions/3.0.0) for mapping, [ggrepel](https://www.rdocumentation.org/packages/ggrepel/versions/0.8.1) to avoid text overlaping on ggplot2, [patchwork](https://www.rdocumentation.org/packages/patchwork/versions/1.0.0/topics/patchwork-package) to assemble plots in grids.
+
+```{r}
+#install.packages(c("e1071", "ggmap", "ggrepel", "patchwork", "tidyverse"))
+library("plyr")
+library("tidyverse")
+library("nlme")
+library("broom")
+library("e1071")
+library("ggmap")
+library("ggrepel")
+library("patchwork")
+```
+
+## Some custom functions.
+
+### Pseudo R-square
+
+Pseudo R-square allows to measure how well variables of our model explain organic matter decomposition
+
+```{r}
+pseudoR2 <- function(y, y_hat) {
+  1 - (sum((y - y_hat)^2) / sum((y - mean(y))^2))
+}
+
+# Residuals
+residues <- function(model, level = 0, computeResidues = TRUE, residues,
+                   main = "") {
+  if (computeResidues) {
+    r = residuals(model, type="normalized", level)
+  } else {
+    r = residues
+  }
+  hist(r, freq=F, main = main, breaks=20)
+  xfit<-seq(min(r),max(r),length=40)
+  yfit<-dnorm(xfit)
+  lines(xfit, yfit, col="red", lwd=2)
+  print("Shapiro-Wilk:")
+  print(shapiro.test(r))
+  print(paste("Kurtosis:", kurtosis(r)))
+  print(paste("Skewness:", skewness(r)))
+}
+```
+
+## Import data
+
+Here, we load our data `data_2017.csv` available for the project in the `data` folder.
+
+```{r}
+df <- read_csv2("data/data_2017.csv")
+df
+```
+
+## Mapping experimental sites
+
+We design a map of our four experimental sites with geographical position collected from Stamen maps. Warnings appear, but it seems its a bug that comes out when mixing ggmap and geom_label_repel.
+
+```{r}
+arrowA <- data.frame(x1 = -58 , x2 = -70.5, y1 = 44, y2 = 46)
+# table including sites and their geograhic position
+sites <- tibble(names = c("Site #45", "Site #9", "Site #A9", "Site #10"),
+                lat = c(46.2759555, 46.2759555, 46.2329064, 46.3277404),
+                lon = c(-71.8584291, -71.8584291, -72.0461854, -71.7486645))
+```
+
+```{r}
+options(repr.plot.width = 12, repr.plot.height = 10)
+par(mar = c(4, 4, 0.1, 0.1)) 
+# create two frames, one for zoom out, the other for zoom in
+frame_map_zoom_out <- c(left = -81, bottom = 40, right = -58, top = 50)
+frame_map_zoom_in <- c(left = -73, bottom = 46, right = -70, top = 47)
+
+# to draw the zoom in frame on the zoom out map
+rect_zoom <- data.frame(t(data.frame(frame_map_zoom_in)))
+
+# the map with zoom out
+map_out <- get_stamenmap(frame_map_zoom_out, zoom = 4, maptype = "toner-lite") %>%
+  ggmap() +
+  geom_rect(data = rect_zoom, aes(xmin = left, xmax = right,
+                                  ymin = bottom, ymax = top, 
+                                  x = NULL, y = NULL),
+            fill = rgb(0, 0, 0, 0.2), colour = "black") +
+  #geom_label_repel(data = sites, aes(x = lon, y = lat, label = names), size = 8) +
+  labs(x = "Longitude", y = "Latitude", title = "A") +
+theme(strip.text = element_text(size = 12), axis.text=element_text(size=12, face = "bold"),
+        axis.title=element_text(size=12)) +
+geom_segment(data=arrowA, aes(x=x1, y=y1, xend=x2, yend=y2), 
+         arrow=arrow(ends="first"), colour="black", lineend = "round") 
+# the map with zoom in
+map_in <- get_stamenmap(frame_map_zoom_in, zoom = 8, maptype = "toner-lite") %>% # toner-lite
+  ggmap() +
+  geom_label_repel(data = sites, aes(x = lon, y = lat, label = names), size = 5, nudge_x = 1.5,  nudge_y = 0.01, box.padding = 1.001, label.padding = 0.25, segment.linetype = 3) +
+ geom_point(aes(x = lon, y = lat), data = sites, size = 2) +
+  labs(x = "Longitude", y = "Latitude", title = "B") +
+theme(strip.text = element_text(size = 12), axis.text=element_text(size=10, face = "bold"),
+        axis.title=element_text(size=12)) 
+map_in
+```
+
+```{r}
+options(repr.plot.width = 10, repr.plot.height = 3)
+maps_ <- map_out +  map_in 
+maps_  
+ggsave("figures/site_map.png", plot = maps_, width = 10, height = 3, dpi = 1200)
+```
+
+## Monthly weather data (2008-2018) at Lemieux, Quebec (46° 09′ 56″ N 72° 19′ 28″ W), for experimental sites (Gouvernement du Canada, 2018)
+
+### Import data weather
+
+`Data weather` has been collected from environnement canada. The content is the collection of data history about temperature and precipitation from years of field trial (2017 and 2018) and 10 years average (2008 to 2018).
+
+```{r}
+df_weather <- read_delim("data/data_weather.csv", show_col_types = FALSE)
+```
+
+### Plot weather data
+
+```{r}
+df_weather$Months <- factor(df_weather$Months,levels = c("June", "July", "August", "September")) #  Sorting bars by Months
+
+df_weather_long <- df_weather %>%
+  pivot_longer(cols = -c(Years, Months))
+
+Weather <- df_weather_long %>%
+  filter(Years %in% c("2017", "2018", "10 Years average")) %>%
+  ggplot(aes(x = `Months`, y = value)) +
+  facet_grid(name ~ ., scales = "free", switch = "y") +
+  geom_bar(aes(fill= Years), colour = "black", stat="identity", position="dodge") +
+  theme_bw() +
+scale_fill_manual(values = c("black","white","grey")) +
+  theme(axis.title.y = element_blank(),
+        strip.background = element_rect(fill = "transparent", colour = "transparent"),
+        strip.placement = "outside", text = element_text(size = 10))
+Weather
+ggsave("figures/Weather.png", plot = Weather, width = 5, height = 3, dpi = 120)
+```
+
+## Compute the 1st order kinetics
+
+Weight loss rate has been estimated with the function
+
+$k_1 = \frac{-ln \left( \frac{M(t)}{M_0} \right) }{t}$,
+
+where $M_0$ is initial litter organic mass, $M(t)$ is litter organic mass that remains after incubation time $t = 90~days$, and $k_1$ is decomposition rate.
+
+```{r}
+kinetics_1st <- function(rw, iw, t) { # First order kinetic function
+    -log(rw/iw)/t
+}
+```
+
+We can compute `k1` for each row of the `df` table.
+
+```{r}
+df$k1 <- kinetics_1st(rw = df$`Remaining tea weight (g)`,
+                      iw = df$`Initial tea weight (g)`,
+                      t = 90)
+```
+
+## Data exploration
+
+Computation of mean and standard deviation of two points (0-90 days) decomposition rate k1
+
+```{r}
+k1_meanSD <- ddply(df, ~ `Tea type`,
+      summarise, mean_k1 = mean(`k1`, na.rm = TRUE),sd_C_over_N=sd(`k1`,  na.rm = TRUE))
+k1_meanSD
+```
+
+Computation of mean and standard deviation of initial and remaining tea weight after 90 days incubations time
+
+```{r}
+data_weight_meanSD <- ddply(df, ~ `Tea type`,
+      summarise, mean_Initial_weight = mean(`Initial tea weight (g)`, na.rm = TRUE), 
+                            sd_Initial_weight = sd(`Initial tea weight (g)`, na.rm = TRUE),
+                            mean_Remaining_weight = mean(`Remaining tea weight (g)`, na.rm = TRUE),
+                            sd_Remaining_weight = sd(`Remaining tea weight (g)`, na.rm = TRUE))
+data_weight_meanSD
+```
+
+Computation of mean and standard deviation of initial C over N ratio
+
+```{r}
+Data_C_over_N <- read_csv2("data/data_C_over_N_initial.csv") %>%
+mutate(C_over_N = Initial_Perc_C / Initial_Perc_N)
+C_over_N_meanSD <- ddply(Data_C_over_N, ~ `Tea type`,
+      summarise,mean_C_over_N=mean(`C_over_N`, na.rm = TRUE),sd_C_over_N=sd(`C_over_N`,  na.rm = TRUE))
+C_over_N_meanSD
+```
+
+Boxplot of $k_1$ for different N dosages per litter.
+
+```{r}
+options(repr.plot.width = 10, repr.plot.height = 8)
+New.labs <- c("Site/10", "Site/45", "Site/9", "Site/A9") # Change labels 
+names(New.labs) <- c("10", "45", "9", "A9")
+ggplot(data = df,
+       mapping = aes(x = as.factor(`Nitrogen dose`), y = k1)) +
+ geom_boxplot() +
+  facet_grid(Site ~ `Tea type`, scales = "free", labeller = labeller(Site = New.labs)) +
+labs(x = "Nitrogen doses") +
+theme_bw() +
+theme(strip.text = element_text(size = 14), axis.text=element_text(size=14),
+        axis.title=element_text(size=16),
+     axis.title.y = element_text(size=16)) 
+```
+
+## Mixed model
+
+## **Question 1**: What is the influence of nitrogen fertilization on TBI parameters (k and S)?
+
+Adding `M / M0` variable to data `df`.
+
+```{r}
+df <- df %>%
+  mutate(`M / M0` = `Remaining tea weight (g)` / `Initial tea weight (g)`)
+```
+
+I store hydrolysable fractions of green tea and rooibos.
+
+```{r}
+Hf_g <- 0.805   # Hydrolysable fraction for Green tea
+Hf_r <- 0.826   # Hydrolysable fraction for Rooibos tea
+```
+
+For comparaison purpose, [Keuskamp et al. (2013)](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12097) hydrolysable fractions were:
+
+-   Green tea `Hf_g = 0.842`\
+-   Rooibos tea `Hf_r = 0.552`
+
+### Computation of the labile fraction (a) and the stabilization factor (s) of green tea
+
+Decomposition rate `k_tbi` is computed from Rooibos tea after 90 days of incubation. The *TBI* assumes that the decomposition of Green tea has stablilized while Rooibos tea is still decomposing. Stabilization factor `S` is computed from Green tea.
+
+```{r}
+df <- df %>%
+  mutate(a = ifelse(`Tea type` == "Green tea",
+                    (`Initial tea weight (g)` - `Remaining tea weight (g)`) / `Initial tea weight (g)`,
+                    NA),
+         S = 1 - a / Hf_g)
+```
+
+Compute litter stability `Sg` (Green tea) and decomposition constant `k_tbi` (Rooibos) for each experimental unit.
+
+```{r}
+df <- df %>%
+  mutate(sdr = paste(df$Site, df$`Nitrogen dose`, df$Repetition))
+sdr_u <- unique(df$sdr)
+```
+
+```{r}
+# Initialize k_tbi column
+df$k_tbi <- NA
+
+# For each rep, compute a and k_tbi
+for (i in 1:length(sdr_u)) {
+  # Green tea
+  Sg_i <- mean(df$S[df$sdr == sdr_u[i] & df$`Tea type` == "Green tea"], na.rm = TRUE)
+  
+  # Rooibos
+  df$a[df$sdr == sdr_u[i] & df$`Tea type` == "Rooibos tea"] <- Hf_r * (1 - Sg_i)
+  ar_i <- df$a[df$sdr == sdr_u[i] & df$`Tea type` == "Rooibos tea"]
+  M_M0i <- df$`M / M0`[df$sdr == sdr_u[i] & df$`Tea type` == "Rooibos tea"]
+  df$k_tbi[df$sdr == sdr_u[i] & df$`Tea type` == "Rooibos tea"] <- log(ar_i / (M_M0i - (1-ar_i))) / 90
+}
+```
+
+```{r}
+K_tbi_S_meanSD <- ddply(df, ~ `Tea type`,
+      summarise, mean_K_tbi = mean(`k_tbi`, na.rm = TRUE), 
+                            sd_K_tbi = sd(`k_tbi`, na.rm = TRUE),
+                            mean_S = mean(`S`, na.rm = TRUE),
+                            sd_S = sd(`S`, na.rm = TRUE))
+K_tbi_S_meanSD
+```
+
+### What affecting TBI parameter decomposition rate (k)?
+
+Because `k_tbi` is computed from Rooibos tea, we create a new Rooibos data table named `df_rooibos`.
+
+```{r}
+df_rooibos <- df %>% 
+  filter(`Tea type` == "Rooibos tea")
+
+TBI_data <- df %>%
+  select(k_tbi, `Tea type`, Farm, `Nitrogen dose`, Site,
+         `Nitrogen type`) %>%
+  rename(`Ntype` = `Nitrogen type`,
+         `Ndose` = `Nitrogen dose`)
+TBI_data <- TBI_data %>%  
+drop_na() %>%
+  droplevels()
+
+TBI_rooibos <- TBI_data %>%
+  filter(`Tea type` == "Rooibos tea")
+```
+
+### `k_tbi` mixed model
+
+lme_TBI model investigates the magnitude of the dose (`Ndose`) on `k_tbi`, considering the random effect of sites (`Site`)
+
+```{r}
+TBI_rooibos <- TBI_rooibos %>%
+mutate(log = log(k_tbi))
+lme_TBI <- lme (log ~  Ndose, 
+               random = ~ 1 | Site, 
+    data = TBI_rooibos)
+```
+
+```{r}
+summary(lme_TBI)
+```
+
+### Pseudo r-square
+
+Pseudo r-square was 0.01 with and 0.45 without random effect indicated the influence of random effects was impotant.
+
+```{r}
+pseudoR2(y = TBI_rooibos$log,
+         y_hat = predict(lme_TBI, level = 0))
+
+pseudoR2(y = TBI_rooibos$log,
+         y_hat = predict(lme_TBI, level = 1))
+```
+
+### Shapiro-Wilk normality test
+
+Our data were normaly distributed as shown by the following residues plot
+
+```{r}
+options(repr.plot.width = 6, repr.plot.height = 4)
+residues(lme_TBI)
+```
+
+### Reporting the results of the mixed models
+
+I create a table including the results I need: estimates, confidence intervals and p-values.
+
+```{r}
+k_tbi_gg <- data.frame(intervals(lme_TBI, which = "fixed")$fixed)
+k_tbi_gg <- k_tbi_gg %>%
+  mutate(variable = rownames(k_tbi_gg))
+k_tbi_gg <- k_tbi_gg %>%
+  mutate(pvalue = summary(lme_TBI)$tTable[, 5],
+         is_significant = ifelse(pvalue <= 0.05, 'Significant at 0.05 level', 'Not significant at 0.05 level'))
+```
+
+Adding random effects to the table.
+
+```{r}
+intervals(lme_TBI)
+ranef(lme_TBI)$`(Intercept)`
+```
+
+```{r}
+k_tbi_re <- data.frame(matrix(ncol = ncol(k_tbi_gg), nrow = 4))
+names(k_tbi_re) <- names(k_tbi_gg)
+k_tbi_re$est. <- ranef(lme_TBI)$`(Intercept)`
+k_tbi_re$variable <- rownames(ranef(lme_TBI))
+k_tbi_re
+
+if (!("Belanger" %in% k_tbi_gg$variable)) k_tbi_gg <- bind_rows(k_tbi_gg, k_tbi_re) # with an if to make sure ranefs are stacked only once
+```
+
+```{r}
+k_tbi_gg$variable <- c("Intercept",  # Change variable names
+                        "Dose N",
+                        "site #10", "site #45", "site #9", "site #A9")
+```
+
+Create a facet column to separate effects by effect category in the plot.
+
+```{r}
+k_tbi_gg$facet <- factor(c('Intercept',
+                        "Nitrogen dose",
+                           "Random effect", "Random effect", "Random effect", "Random effect"))
+
+k_tbi_gg <- k_tbi_gg %>%
+  mutate(facet = factor(facet, levels = rev(c("Random effect", 
+                                              "Nitrogen dose", "Intercept"))))
+k_tbi_gg
+```
+
+The `k_tbi_gg` table is now set up for the plot.
+
+```{r}
+options(repr.plot.width = 10, repr.plot.height = 4)
+plot_k_tbi_model <- k_tbi_gg %>%
+  filter(variable != "Intercept") %>%
+  ggplot(aes(x = est., y = variable)) +
+  facet_grid(facet ~ ., scales = 'free', space = 'free') +
+  geom_vline(xintercept = 0, colour='grey70') +
+  geom_point() +
+  geom_segment(aes(x = lower, xend = upper, y = variable, yend = variable)) +
+  xlab('Coefficient') +
+  ylab('') +
+  theme_bw() +
+  theme(strip.text.y = element_text(angle=0),
+        legend.title = element_blank(),
+        legend.position = "bottom", strip.text = element_text(size = 14), axis.text=element_text(size=14),
+        axis.title=element_text(size=14)) 
+plot_k_tbi_model
+  ggsave("figures/k_tbi-mixed-model-coefficients.png", plot = plot_k_tbi_model, width = 10, height = 4, dpi = 600)
+```
+
+### What affecting TBI parameter stabilization factor (S)?
+
+Because `S` is computed from Green tea, we create a new Green data table named `df_green`.
+
+```{r}
+df_green <- df %>% 
+  filter(`Tea type` == "Green tea")
+
+S_data <- df %>%
+  select(S, `Tea type`, Farm, `Nitrogen dose`, Site,
+         `Nitrogen type`) %>%
+  rename(Ntype = `Nitrogen type`,
+         Ndose = `Nitrogen dose`) 
+S_data <- S_data %>%
+  drop_na() %>%
+  droplevels()
+
+S_Green <- S_data %>%
+  filter(`Tea type` == "Green tea")
+```
+
+### `S` mixed model
+
+lme_S model investigates the magnitude of the dose (`Ndose`) on `S`, considering the random effect of sites (`Site`)
+
+```{r}
+S_Green <- S_Green%>% 
+mutate(log = log(S))
+```
+
+```{r}
+S_Green <- S_Green%>% 
+mutate(log = log(S))
+```
+
+```{r}
+lme_S <- lme (log ~  Ndose, 
+               random = ~ 1 | Site, 
+    data = S_Green )
+```
+
+```{r}
+summary(lme_S)
+```
+
+### Pseudo r-square
+
+Pseudo r-square was 0.01 with and 0.4 without random effect indicated the influence of random effects was impotant.
+
+```{r}
+pseudoR2(y = S_Green$log,
+         y_hat = predict(lme_S, level = 0))
+
+pseudoR2(y = S_Green$log,
+         y_hat = predict(lme_S, level = 1))
+```
+
+### Shapiro-Wilk normality test
+
+Our data were normaly distributed as shown by the following residues plot
+
+```{r}
+options(repr.plot.width = 6, repr.plot.height = 4)
+residues(lme_S)
+```
+
+### Reporting the results of the mixed models
+
+I create a table including the results I need: estimates, confidence intervals and p-values.
+
+```{r}
+S_tbi_gg <- data.frame(intervals(lme_S, which = "fixed")$fixed)
+S_tbi_gg <- S_tbi_gg %>%
+  mutate(variable = rownames(S_tbi_gg))
+S_tbi_gg <- S_tbi_gg %>%
+  mutate(pvalue = summary(lme_S)$tTable[, 5],
+         is_significant = ifelse(pvalue <= 0.05, 'Significant at 0.05 level', 'Not significant at 0.05 level'))
+```
+
+Adding random effects to the table.
+
+```{r}
+S_tbi_re <- data.frame(matrix(ncol = ncol(S_tbi_gg), nrow = 4))
+names(S_tbi_re) <- names(S_tbi_gg)
+S_tbi_re$est. <- ranef(lme_S)$`(Intercept)`
+S_tbi_re$variable <- rownames(ranef(lme_S))
+S_tbi_re
+
+if (!("Belanger" %in% S_tbi_gg$variable)) S_tbi_gg <- bind_rows(S_tbi_gg, S_tbi_re) # with an if to make sure ranefs are stacked only once
+```
+
+```{r}
+S_tbi_gg$variable <- c("Intercept",  # Change variable names
+                        "Dose N",
+                        "site #10", "site #45", "site #9", "site #A9")
+```
+
+Create a facet column to separate effects by effect category in the plot.
+
+```{r}
+S_tbi_gg$facet <- factor(c('Intercept',
+                        "Nitrogen dose",
+                           "Random effect", "Random effect", "Random effect", "Random effect"))
+
+S_tbi_gg <- S_tbi_gg %>%
+  mutate(facet = factor(facet, levels = rev(c("Random effect", 
+                                              "Nitrogen dose", "Intercept"))))
+S_tbi_gg
+```
+
+The `S` table is now set up for the plot.
+
+```{r}
+options(repr.plot.width = 10, repr.plot.height = 4)
+plot_S_tbi_model <- S_tbi_gg %>%
+  filter(variable != "Intercept") %>%
+  ggplot(aes(x = est., y = variable)) +
+  facet_grid(facet ~ ., scales = 'free', space = 'free') +
+  geom_vline(xintercept = 0, colour='grey70') +
+  geom_point() +
+  geom_segment(aes(x = lower, xend = upper, y = variable, yend = variable)) +
+  xlab('Coefficient') +
+  ylab('') +
+  theme_bw() +
+  theme(strip.text.y = element_text(angle=0),
+        legend.title = element_blank(),
+        legend.position = "bottom", strip.text = element_text(size = 14), axis.text=element_text(size=14),
+        axis.title=element_text(size=14)) 
+plot_S_tbi_model
+  ggsave("figures/S_tbi-mixed-model-coefficients.png",plot = plot_S_tbi_model, width = 10, height = 4, dpi = 600)
+```
+
+## **Question 2**: Where cranberry soils are placed among the axes of the *TBI*?
+
+Here, we extracted data from Keuskamp et al.2013 in order to compare with cranberry ecosystem
+
+### Import data
+
+We adapted keuskamp's data by adding cranberry ecosystem
+
+```{r}
+df_keuskamp <- read_csv2("data/keuskamp_data.csv")# Import Keuskamp data
+head(df_keuskamp)
+```
+
+Create a logic column (`is_cranberry`) in order to identify `Cranberries` by color in the plot below
+
+```{r}
+df_keuskamp <- df_keuskamp %>%
+  mutate(is_cranberry = Region == "Cranberries",
+        Region_2 = paste(Nombre, Region, sep = " - "),
+        Region_2 = factor(Region_2, levels = as.vector(Region_2))) # Relevel group factor
+                         
+```
+
+### Figure TBI
+
+TBI of Quebec cranberry agroecosystem compared to the TBI of ecosystems reported by Keuskamp et al 2013. United States--Florida = US-FL, China = CN, Panama = PA, the Netherlands = NL, Austria = AU, Ireland = IE, and Iceland = IS.
+
+```{r}
+options(repr.plot.width = 10, repr.plot.height = 7)
+ggplot(df_keuskamp, aes(x = Stabilisation_factor_S, y = Decomposition_rate_K)) + 
+geom_errorbar(aes(xmin = Stabilisation_factor_S - SE_Stabilisation_factor, xmax = Stabilisation_factor_S + 
+                SE_Stabilisation_factor,  width= 0.001)) + 
+geom_errorbar(aes(ymin = Decomposition_rate_K- SE_K, ymax = Decomposition_rate_K + 
+                SE_K,  width= 0.01)) + #
+geom_rect(aes(xmin=Stabilisation_factor_S - SE_Stabilisation_factor, xmax=Stabilisation_factor_S + SE_Stabilisation_factor,
+              ymin=Decomposition_rate_K- SE_K, ymax=Decomposition_rate_K + SE_K), fill="grey80", alpha=0.2) +
+geom_point(aes( color = `Region_2`), size = 3) +
+scale_x_continuous(breaks = 0.05*0:1000,
+                   expand = expand_scale(add = 0.05)) +
+scale_y_continuous(breaks = 0.005*0:1000,
+                  expand = expand_scale(add = 0.005)) +
+geom_text_repel(aes(label = Nombre)) + 
+  theme_bw() +
+ labs(x = expression(paste("Stabilization factor ",(italic("S")))), y = expression(paste("Decomposition rate ", (italic("k"))))) +
+theme(legend.position = c(0.80, 0.60), legend.title = element_blank(),
+     legend.text = element_text(size=14), axis.title=element_text(size=16), 
+      axis.text=element_text(size=14))   
+ggsave("figures/TBI_keuskamp.png", width = 10, height = 7, dpi = 600)
+```
+
+### **Question 3**:What is the fractal kinetics of litter matterials ?
+
+Depending on the nature of decaying material and its immediate environment, the decomposition rate of plant residues can decrease gradually through time as follow:
+
+$$k_t = k_1 t^{{-h}}$$
+
+$$log \left( k_t \right) = log \left( k_1 t^{-h} \right)$$
+
+$$log \left( k_t \right) = log \left( k_1 \right) + log \left(t^{-h} \right)$$
+
+$$log \left( k_t \right) = log \left( k_1 \right) - h \times log \left(t\right)$$
+
+Where $k_t$ is first order kinetics, $k_1$ is reaction rate at time t = 1 and $h$ is a fractal coefficient (0 ≤ h ≤ 1) accounting for the decreasing decomposition rate through time
+
+#### Fractal coefficient computation
+
+##### Import data
+
+Fractal data set from 2018 trial contained information on `Final carbon (%)` `Final weight (g)` `Initial weight (g)` `Initial carbon (%)`
+
+```{r}
+data_fractal <- read_csv2("data/data_fractal.csv")
+head(data_fractal)
+dim(data_fractal)
+```
+
+##### Adding some variables
+
+`First order kinetic names (k)`, `log(k)` and `Log(t)` has been computed. Then we select the variables needed in order compute the fractal coefficient `h`
+
+```{r}
+data_lm_fractal <- data_fractal %>%
+  mutate(
+    # time and k
+    time = Prelevement * 21,
+    k = -log(`Final weight (g)` / `Initial weight (g)`)/ time,
+  ) %>%
+  mutate(
+    # log.time and log.k
+    log.time = log10(time),
+    log.k = log10(k)
+  ) %>%
+  select(`Tea type`, `k`,`log.time`, `log.k`, `time`)
+```
+
+Then, we create data to store the results `intercept`, `slope` and r square `r_sq`
+
+```{r}
+fractal_kinetics <- tibble(
+    tea_types = c("Rooibos tea", "Cranberry litter", "Green tea"),
+    intercept_ll = NA,
+    intercept = NA,
+    intercept_ul = NA,
+    slope_ll = NA,
+    slope = NA,
+    slope_ul = NA,
+    r_sq = NA
+)
+```
+
+    lm(log.k ~ log.time)
+    k1 = 10^intercept
+    h = -slope
+
+Computation of mean and sd value `log.time` and `log.k` by `time` and `tea type` to determine `h`
+
+```{r}
+log_meanSD <- ddply(data_lm_fractal, ~ time + `Tea type`,
+      summarise, mean_log.time = mean(`log.time`, na.rm = TRUE), 
+                            sd_log.time = sd(`log.time`, na.rm = TRUE),
+                            mean_log.k = mean(`log.k`, na.rm = TRUE),
+                            sd_log.k = sd(`log.k`, na.rm = TRUE))
+head(log_meanSD)
+```
+
+```{r}
+data_median_lm_fractal <- aggregate(cbind(log.time, log.k) ~ time + `Tea type`, data = data_lm_fractal, FUN = mean)
+head(data_median_lm_fractal)
+```
+
+Applying `lm` in a loop `for` in order to compute `h`, r square `r_sq` and `k1` by `tea type`
+
+```{r}
+conf_level <- 0.95
+
+for (i in 1:nrow(fractal_kinetics)) {
+    
+    lm_fractal <- log_meanSD %>%
+      filter(`Tea type` == fractal_kinetics$tea_types[i]) %>%
+      lm(`mean_log.k` ~ `mean_log.time`, data = .)
+    
+    # intercept
+    fractal_kinetics$intercept_ll[i] <- confint(lm_fractal, level = conf_level)[1, 1]
+    fractal_kinetics$intercept[i] <- coef(lm_fractal)[1]
+    fractal_kinetics$intercept_ul[i] <- confint(lm_fractal, level = conf_level)[1, 2]
+    
+    # Slope
+    fractal_kinetics$slope_ll[i] <- confint(lm_fractal, level = conf_level)[2, 1]
+    fractal_kinetics$slope[i] <- coef(lm_fractal)[2]
+    fractal_kinetics$slope_ul[i] <- confint(lm_fractal, level = conf_level)[2, 2]
+    
+    # statistics
+    fractal_kinetics$r_sq[i] <- summary(lm_fractal)$r.squared
+}
+```
+
+```{r}
+fractal_kinetics <-  fractal_kinetics %>%
+  mutate(h_ll = -slope_ul,
+         h = -slope,
+         h_ul = -slope_ll,
+         k1_ll = 10^intercept_ll,
+         k1 = 10^intercept,
+        k1_ul = 10^intercept_ul)%>%
+  select(tea_types, r_sq, h_ll, h, h_ul, k1_ll, k1, k1_ul)
+fractal_kinetics
+```
+
+Fractal first order parameters of teas and cranberry litter decomposition under field conditions
+
+```{r}
+log_meanSD <- subset(log_meanSD, `Tea type` == "Green tea" | `Tea type` == "Rooibos tea") 
+fractal_kinetics2 <- subset(fractal_kinetics, tea_types == "Green tea" | tea_types == "Rooibos tea")
+log_meanSD
+```
+
+```{r}
+options(repr.plot.width = 8, repr.plot.height = 7)
+log_meanSD %>%
+  ggplot(aes(x = mean_log.time, y  = mean_log.k)) +
+  geom_smooth(method = "lm", se = FALSE, colour="black") +
+  geom_errorbar(aes(ymin=`mean_log.k`- `sd_log.k`, ymax=`mean_log.k` + 
+                 `sd_log.k`,  width= 0.1)) + #, alpha=0.9, size=1.5,  width=3
+geom_point(size = 3) + 
+ facet_grid(. ~ `Tea type`) +
+  geom_text(data = fractal_kinetics2 %>%
+             rename(`Tea type`= tea_types),
+            parse = TRUE,
+            aes(label = paste("italic(h) ==", round(h, 1), "%+-%", round(h-h_ll, 1))), 
+            x = 1.60, y = -2, size = 5) + #
+  geom_text(data = fractal_kinetics2 %>%
+             rename(`Tea type`= tea_types),  
+            parse = TRUE,
+            aes(label = paste(("italic(k[1]) =="), round(k1, 3), "%+-%", round(k1- k1_ll, 3))),
+            x = 1.60, y = -2.1, size = 5) +
+geom_text(data = fractal_kinetics2 %>%
+              rename(`Tea type`= tea_types),
+          parse = TRUE,
+            aes(label = paste(("R^2 =="), round(r_sq, 2))),
+            x = 1.5, y = -2.2, size = 5) +
+labs(x = expression(paste("log ",italic("(t)"))), y=expression(paste("log ",italic("(k)")))) +
+  theme_bw() + 
+theme(strip.text = element_text(size = 14), axis.text=element_text(size=14),
+        axis.title=element_text(size=12)) 
+ggsave("figures/Fractal first order parameters of teas and cranberry litter decomposition under field conditions.png",
+       width = 8, height = 7, dpi = 600)
+```
+
+## Estimation of the carbon decreasing rate of teas and cranberry residue
+
+Reaction rate $k_1$ at time t = 1 and fractal coefficient $h$
+
+```{r}
+k1_rooibos <- fractal_kinetics %>%
+  filter(tea_types == "Rooibos tea") %>%
+  pull(k1)
+
+k1_green <- fractal_kinetics %>%
+  filter(tea_types == "Green tea") %>%
+  pull(k1)
+
+k1_cranberry <- fractal_kinetics %>%
+  filter(tea_types == "Cranberry litter") %>%
+  pull(k1)
+
+h_rooibos <- fractal_kinetics %>%
+  filter(tea_types == "Rooibos tea") %>%
+  pull(h)
+
+h_green <- fractal_kinetics %>%
+  filter(tea_types == "Green tea") %>%
+  pull(h)
+
+h_cranberry <- fractal_kinetics %>%
+  filter(tea_types == "Cranberry litter") %>%
+  pull(h)
+```
+
+Computing $k_t$ for each tea type and renaming somes variables to be able to group plot
+
+$$k_t = k_1 t^{{-h}}$$
+
+```{r}
+data_rate <- data.frame(Prelevement = 1:7) %>%
+                            mutate(`Time (days)` = Prelevement * 21,
+                                  `Rate cranberry` = k1_cranberry *  `Time (days)`**-h_cranberry,
+                                  `Rate rooibos` = k1_rooibos * `Time (days)`**-h_rooibos,
+                                  `Rate green` = k1_green * `Time (days)`**-h_green) %>%
+                            rename(`Cranberry litter` = `Rate cranberry`,
+                                  `Rooibos tea` = `Rate rooibos`,
+                                   `Green tea` = `Rate green`)
+data_rate
+```
+
+Tranforming data_rate into long format data in order to generate the plot
+
+```{r}
+names(data_lm_fractal)
+unique(data_lm_fractal$`Tea type`)
+dim(data_lm_fractal)
+```
+
+```{r}
+data_long <- gather(data = data_rate, key = `tea type`, value = Rate, c(`Cranberry litter`, `Rooibos tea`, `Green tea`),
+                    factor_key=TRUE)
+data_long <- data_long %>%
+             rename(`Litter type`= `tea type`)
+```
+
+Plot of litter decomposition rate over time under field conditions
+
+```{r}
+meanSD_rate_weight_loss <- ddply(data_lm_fractal, ~ `Tea type` + `time`,
+      summarise, mean_rate_weight_loss = mean(`k`, na.rm = TRUE), 
+                            sd_rate_weight_loss = sd(`k`, na.rm = TRUE))
+head(meanSD_rate_weight_loss)
+```
+
+```{r}
+names(meanSD_rate_weight_loss)
+```
+
+```{r}
+#install.packages("ggrepel")
+#library("ggrepel")
+data_label <- meanSD_rate_weight_loss                              # Modify data
+data_label$label <- NA
+data_label$label[which(data_label$`time` == max(data_label$`time`))] <- data_label$`Tea type`[which(data_label$`time` == max(data_label$`time`))]
+```
+
+```{r}
+data_label$`Tea type`[which(data_label$`time` == max(data_label$`time`))]
+data_label$label[which(data_label$`time` == max(data_label$`time`))]
+which(data_label$`time` == max(data_label$`time`))
+names(data_label)
+```
+
+```{r}
+options(repr.plot.width = 8, repr.plot.height = 8)
+plot <- ggplot(data_label, aes(x = `time`, y = `mean_rate_weight_loss`, group = `Tea type`)) +
+geom_line() +
+geom_errorbar(aes(ymin=`mean_rate_weight_loss`- `sd_rate_weight_loss`, ymax=`mean_rate_weight_loss` + 
+                 `sd_rate_weight_loss`), width=5, alpha= 1, size=0.6) + 
+geom_point(aes(shape = `Tea type`), size = 3)+
+geom_text_repel(aes(label = label), nudge_x = 1, force_pull = -0.03,
+                 min.segment.length = 0.7, na.rm = TRUE) + 
+labs(x = "Elapsed time (days)" , y = expression("Decomposition rate (day"^" -1"~")"))  +
+scale_y_continuous(breaks = 0.002*0:1000,
+                     expand = expand_scale(add = 0.0002)) +
+scale_x_continuous(breaks = 10*0:1000,
+                     expand = expand_scale(add = 10)) +
+ xlim(c(0,180)) +
+theme_bw() #+
+theme(strip.text = element_text(size = 14), axis.text=element_text(size=14), #legend.text = element_text(size=14),
+      #legend.title = element_text(size=14),
+        axis.title=element_text(size=14)) #+
+plot + theme(legend.position = "none")
+ggsave("figures/K(t).png", width = 10, height = 7, dpi = 600)
+```
+
+## 12. **Question 4**: What is the fractal kinetics of litter biochemical composition ?
+
+### 12.1 Biochemical composition data analysis
+
+Here, we load `data.csv`, `data_fiber_initial.csv` and `data_fiber.csv`available for the project in the `data` folder. The `data_2018.csv` contained incubation tea bag details and soil carateristics from the second essay in 2018; `data_fiber_initial.csv` contained only initial tea bag caracteristics and `data_fiber.csv` contained mostly tea bag biochemical details as soluble, holocellulose and lignin content. We wanted to use only data about `green tea`, `rooibos tea` and `cranberry residu`. In order to do that, we used `subset` function to get `data_subset`
+
+```{r}
+data <- read_csv2('data/data_2018.csv', col_types = "??????????????f????????????????????", show_col_types = FALSE)
+data_fiber <- read_csv('data/data_fiber.csv', show_col_types = FALSE)
+data_fiber_initial2 <- read_csv2('data/Initial_biochemical_composition.csv', show_col_types = FALSE)
+```
+
+```{r}
+Biochemical_meanSD <- ddply(data_fiber_initial2, ~ `Biomasse type`,
+      summarise, `mean_SOL_initial (%)` = mean(`SOL perc initial (%)`, na.rm = TRUE), 
+                            `sd_SOL_initial (%)` = sd(`SOL perc initial (%)`, na.rm = TRUE),
+                            `mean_LIC_initial (%)` = mean(`LIC perc initial (%)`, na.rm = TRUE),
+                            `sd_LIC_initial (%)` = sd(`LIC perc initial (%)`, na.rm = TRUE),
+                            `mean_HOLO_initial (%)` = mean(`HOLO perc initial (%)`, na.rm = TRUE),
+                            `sd_HOLO_initial (%)` = sd(`HOLO perc initial (%)`, na.rm = TRUE))
+Biochemical_meanSD
+
+data_fiber_initial <- Biochemical_meanSD %>%
+rename(`Biomass type` = `Biomasse type`)
+```
+
+```{r}
+data_subset <- subset(data,  (`Sampling period (3 weeks)`> 0 & `Sampling period (3 weeks)`<= 7 & (`Biomass type`== "Cranberry litter" | 
+`Biomass type` == "Green tea"| `Biomass type` == "Rooibos tea")))
+```
+
+Join all 3 data with with `left_join` function. The obtained data is called `data_join_02`
+
+```{r warning=FALSE}
+data_join <- data_subset %>%
+  left_join(data_fiber, by = 'Iden fiber')
+
+data_join_02 <- data_join %>%
+  left_join(data_fiber_initial, by = 'Biomass type')%>%
+mutate(`Sample final weight (g)` = as.numeric(`Sample final weight (g)`),
+       `Sample final weight (g)` = as.numeric(`Sample final weight (g)`),
+       `Sample final weight (g)` = as.numeric(`Sample final weight (g)`))
+```
+
+## Some calculations
+
+### Initial and final content of carbon, soluble, holocellulose and lignin
+
+```{r}
+data_join_02 <- data_join_02 %>%
+mutate(`Initial SOL content (g)` = `mean_SOL_initial (%)` * `Sample initial weight (g)` / 100,
+       `Initial HOLO content (g)` = `mean_HOLO_initial (%)` * `Sample initial weight (g)` / 100,
+       `Initial LIC content (g)` = `mean_LIC_initial (%)` * `Sample initial weight (g)` / 100,
+       `Final SOL content (g)` = `SOL perc ILR (%)` * `Sample final weight (g)` / 100,
+       `Final LIC content (g)` = `LIC perc ILR (%)` * `Sample final weight (g)` / 100,
+       `Final HOLO content (g)` = `HOLO perc ILR (%)` * `Sample final weight (g)` / 100,
+       `Initial Hydrolyzable content (g)` = `Initial SOL content (g)` +  `Initial HOLO content (g)`,
+       `Final Hydrolyzable content (g)` = `Final SOL content (g)` + `Final HOLO content (g)`)
+```
+
+### First order kinetic
+
+Here,we compute decomposition rate of carbon, soluble, holocellulose and lignin using first order kinetic.
+
+```{r}
+kinetics_1st <- function(rw, iw, t) { # first order kinetic function
+    -log10(rw/iw)/t
+}
+```
+
+```{r}
+data_join_02 <- data_join_02 %>%
+mutate(`rate weight loss` = kinetics_1st(rw = `Sample final weight (g)`,
+                      iw = `Sample initial weight (g)`,
+                      t = `Sampling period (3 weeks)` * 21),
+    `rate SOL` = kinetics_1st(rw = `Final SOL content (g)`,
+                      iw = `Initial SOL content (g)`,
+                      t = `Sampling period (3 weeks)` * 21),
+       `rate HOLO` = kinetics_1st(rw = `Final HOLO content (g)`,
+                      iw = `Initial HOLO content (g)`,
+                      t = `Sampling period (3 weeks)` * 21),
+       `rate LIC` = kinetics_1st(rw = `Final LIC content (g)`,
+                      iw = `Initial LIC content (g)`,
+                      t = `Sampling period (3 weeks)` * 21),
+       `rate Hydrolyzable` = kinetics_1st(rw = `Final Hydrolyzable content (g)`,
+                      iw = `Initial Hydrolyzable content (g)`,
+                      t = `Sampling period (3 weeks)` * 21),
+      `Sampling period (days)` = `Sampling period (3 weeks)` * 21)
+```
+
+### Selection all variables we interested in data_join_02. Our final data is called `data_filtre`
+
+```{r}
+na.action = na.exclude
+data_filtre <- data_join_02 %>%
+select(`Iden fiber`, `Biomass type`,  `Sampling period (days)`, `Site`, `Producer`,`Repetition`, #`C_over_N`,
+ `Initial SOL content (g)`, `Initial HOLO content (g)`, `Initial LIC content (g)`, `Final SOL content (g)`,`Final HOLO content (g)`, `Final LIC content (g)`,
+       `Sample final weight (g)`, `Initial Hydrolyzable content (g)`, `Final Hydrolyzable content (g)`, 
+       `rate SOL`, `rate HOLO`, `rate LIC`, `rate Hydrolyzable`, `rate weight loss`) %>% 
+rename(Lignin = `rate LIC`, 
+       Holocelulose = `rate HOLO`, 
+       Soluble = `rate SOL`,
+       Hydrolyzable = `rate Hydrolyzable`)
+```
+
+```{r}
+meanSD_rate_weight_loss <- ddply(data_filtre, ~ `Biomass type` + `Sampling period (days)`,
+      summarise, mean_rate_weight_loss = mean(`rate weight loss`, na.rm = TRUE), 
+                            sd_rate_weight_loss = sd(`rate weight loss`, na.rm = TRUE))
+head(meanSD_rate_weight_loss)
+```
+
+## Biochemical fractal kinetics
+
+Transforming `data_filtre` to long format data `data_long` in order to use a `facet_grid` in the plot below
+
+
+```{r}
+data_long <- pivot_longer(data = data_filtre, cols = c(`Soluble`, `Lignin`, `Holocelulose`, `Hydrolyzable`),
+                          names_to = "Biochemical composition",
+                          values_to = "Biochemical decomposition rate")
+data_long
+```
+
+Extract data_long according to biomass type `Rooibos and Green tea`; and Biochemical composition `Lignin and Hydrolyzable` fraction
+
+```{r}
+data_long <- subset(data_long, `Biomass type` == "Green tea" | `Biomass type` == "Rooibos tea")
+data_long <- subset(data_long, `Biochemical composition` == "Lignin" | `Biochemical composition` == "Hydrolyzable")
+names(data_long)
+```
+
+```{r}
+data_long <- data_long %>%
+        mutate(`log.K` = log10(`Biochemical decomposition rate`),
+                `log.T` = log10(`Sampling period (days)`))
+```
+
+Create new facet names for variable `Biochemical composition`
+
+```{r}
+New.labs <- c("Non-Hydrolyzable", "Hydrolyzsable") 
+names(New.labs) <- c("Lignin", "Hydrolyzable")
+```
+
+Selection of all variables needed in `data_lm_fractal_biochemical`
+
+```{r}
+data_lm_fractal_biochemical <- data_long %>%
+  select(`Biomass type`, `Biochemical decomposition rate`, `log.T`, `log.K`, `Biochemical composition`, `Sampling period (days)`)
+```
+
+Then, we create data to store the results `intercept`, `slope` and r square `r_sq`
+
+```{r}
+fractal_biochemical_kinetics <- tibble(
+    `Biomass type` = c("Green tea", "Rooibos tea", "Green tea", "Rooibos tea"),
+    Biochemical_composition = c(rep("Lignin", 2), rep("Hydrolyzable", 2)),
+    intercept_ll = NA,
+    intercept = NA,
+    intercept_ul = NA,
+    slope_ll = NA,
+    slope = NA,
+    slope_ul = NA,
+    r_sq = NA
+)
+```
+
+    lm(log.K ~ log.T)
+    K1 = 10^intercept
+    h = -slope
+
+Computation of median value of `log.time` and `log.k` by `time` and `tea type` to determine `h`
+
+
+```{r}
+MeanSD_fractal_biochemical <- ddply(data_lm_fractal_biochemical, ~ `Sampling period (days)` + `Biomass type` + `Biochemical composition`,
+      summarise, mean_log.T = mean(`log.T`, na.rm = TRUE), 
+                            sd_log.T = sd(`log.T`, na.rm = TRUE),
+                            mean_log.K = mean(`log.K`, na.rm = TRUE), 
+                            sd_log.K = sd(`log.K`, na.rm = TRUE))
+head(MeanSD_fractal_biochemical, 30)
+```
+
+Applying `lm` in a loop `for` in order to compute `h`, r square `r_sq` and `k1`; by `Biomass type` and `Biochemical composition`
+
+```{r}
+conf_level <- 0.95
+
+for (i in 1:nrow(fractal_biochemical_kinetics)) {
+    
+    lm_fractal <- MeanSD_fractal_biochemical %>%
+      filter((`Biomass type` == fractal_biochemical_kinetics$`Biomass type`[i]) &
+             (`Biochemical composition` == fractal_biochemical_kinetics$Biochemical_composition[i])) %>%
+      lm(`mean_log.K` ~ `mean_log.T`, data = .)
+    
+    # interept
+    fractal_biochemical_kinetics$intercept_ll[i] <- confint(lm_fractal, level = conf_level)[1, 1]
+    fractal_biochemical_kinetics$intercept[i] <- coef(lm_fractal)[1]
+    fractal_biochemical_kinetics$intercept_ul[i] <- confint(lm_fractal, level = conf_level)[1, 2]
+    
+    # slope
+    fractal_biochemical_kinetics$slope_ll[i] <- confint(lm_fractal, level = conf_level)[2, 1]
+    fractal_biochemical_kinetics$slope[i] <- coef(lm_fractal)[2]
+    fractal_biochemical_kinetics$slope_ul[i] <- confint(lm_fractal, level = conf_level)[2, 2]
+    
+    # statistics
+    fractal_biochemical_kinetics$r_sq[i] <- summary(lm_fractal)$r.squared    
+}
+```
+
+Computation of `h`, r square `r_sq` and `k1`; by `Biomass type` and `Biochemical composition`
+
+```{r}
+fractal_biochemical_kinetics <- fractal_biochemical_kinetics %>%
+  mutate(h_ll = -slope_ul,
+         h = -slope,
+         h_ul = -slope_ll,
+         k1_ll = 10^intercept_ll,
+         k1 = 10^intercept,
+         k1_ul = 10^intercept_ul) %>%
+  select(`Biomass type`,
+         Biochemical_composition,
+         r_sq,
+         h_ll, h, h_ul,
+         k1_ll, k1, k1_ul)
+fractal_biochemical_kinetics
+```
+
+Fractal first order parameters of decomposition of teas biochemicals compositions under field conditions
+
+```{r}
+names(MeanSD_fractal_biochemical)
+```
+```{r}
+names(fractal_biochemical_kinetics)
+```
+
+```{r}
+options(repr.plot.width = 8, repr.plot.height = 7)
+MeanSD_fractal_biochemical %>%
+  ggplot(aes(x = `mean_log.T`, y  = `mean_log.K`)) +
+  geom_smooth(method = "lm", se = FALSE, colour="black") +
+  geom_errorbar(aes(ymin= `mean_log.K`- `sd_log.K`, ymax=`mean_log.K` + 
+                `sd_log.K`,  width= 0.08)) + #, alpha=0.9, size=1.5,  width=3
+geom_point(size = 3) + 
+  facet_grid(`Biochemical composition` ~ `Biomass type`, labeller = labeller(`Biochemical composition` = New.labs)) +
+  geom_text(data = fractal_biochemical_kinetics %>%
+              rename(`Biochemical composition`= Biochemical_composition),
+            parse = TRUE,
+          aes(label = paste("italic(h) ==", round(h, 1), "%+-%", round(h-h_ll, 1))),
+            x = 1.5, y = -4.1, size = 5) +
+  geom_text(data = fractal_biochemical_kinetics %>%
+              rename(`Biochemical composition`= Biochemical_composition),  
+            parse = TRUE,
+            aes(label = paste("italic(k[1]) ==", round(k1, 3), "%+-%", round(k1-k1_ll, 3))),
+            x = 1.5, y = -3.85, size = 5) +
+
+geom_text(data = fractal_biochemical_kinetics %>%
+              rename(`Biochemical composition`= Biochemical_composition),
+         parse = TRUE,
+          aes(label = paste(("R^2 =="), round(r_sq, 2))),                 
+           x = 1.5, y = -3.5, size = 5) + 
+labs(x = expression(paste("log ", italic("(t)"))), y = expression(paste("log ", italic("(k)")))) +
+  theme_bw() +
+theme(strip.text = element_text(size = 12), axis.text=element_text(size=8),
+       axis.title=element_text(size=12)) 
+ggsave("figures/Fractal first order parameters of decomposition of teas biochemicals compositions under field conditions.png", 
+      width = 8, height = 7, dpi = 600)
+```
