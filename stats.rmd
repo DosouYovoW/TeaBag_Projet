@@ -999,7 +999,6 @@ head(meanSD_rate_weight_loss)
 
 Transforming `data_filtre` to long format data `data_long` in order to use a `facet_grid` in the plot below
 
-
 ```{r}
 data_long <- pivot_longer(data = data_filtre, cols = c(`Soluble`, `Lignin`, `Holocelulose`, `Hydrolyzable`),
                           names_to = "Biochemical composition",
@@ -1056,7 +1055,6 @@ fractal_biochemical_kinetics <- tibble(
     h = -slope
 
 Computation of median value of `log.time` and `log.k` by `time` and `tea type` to determine `h`
-
 
 ```{r}
 MeanSD_fractal_biochemical <- ddply(data_lm_fractal_biochemical, ~ `Sampling period (days)` + `Biomass type` + `Biochemical composition`,
@@ -1117,6 +1115,7 @@ Fractal first order parameters of decomposition of teas biochemicals composition
 ```{r}
 names(MeanSD_fractal_biochemical)
 ```
+
 ```{r}
 names(fractal_biochemical_kinetics)
 ```
