@@ -83,19 +83,23 @@ df
 We design a map of our four experimental sites with geographical position collected from Stamen maps. Warnings appear, but it seems its a bug that comes out when mixing ggmap and geom_label_repel.
 
 ```{r}
-arrowA <- data.frame(x1 = -58 , x2 = -70.5, y1 = 44, y2 = 46)
+#sites <- tibble(names = c("Site #45", "Site #9 ", "Site #A9", "Site #10"),
+ #               lat = c(46.2759555, 46.2759555, 46.2329064, 46.3277404),
+  #              lon = c(-71.8584291, -71.8584291, -72.0461854, -71.7486645))
+arrowA <- data.frame(x1 = -85 , x2 = -73, y1 = 50, y2 = 47)
+arrowB <- data.frame(x1 = -57 , x2 = -70, y1 = 48.5, y2 = 47)
 # table including sites and their geograhic position
-sites <- tibble(names = c("Site #45", "Site #9", "Site #A9", "Site #10"),
-                lat = c(46.2759555, 46.2759555, 46.2329064, 46.3277404),
-                lon = c(-71.8584291, -71.8584291, -72.0461854, -71.7486645))
+sites <- tibble(names = c("Sites #9 and #45", "Site #A9", "Site #10"),
+                lat = c(46.2759555, 46.2329064, 46.3277404),
+                lon = c(-71.8584291, -72.0461854, -71.7486645))
 ```
 
 ```{r}
-options(repr.plot.width = 12, repr.plot.height = 10)
+options(repr.plot.width = 6, repr.plot.height = 3)
 par(mar = c(4, 4, 0.1, 0.1)) 
 # create two frames, one for zoom out, the other for zoom in
-frame_map_zoom_out <- c(left = -81, bottom = 40, right = -58, top = 50)
-frame_map_zoom_in <- c(left = -73, bottom = 46, right = -70, top = 47)
+frame_map_zoom_out <- c(left = -98, bottom = 42, right = -55, top = 55)
+frame_map_zoom_in <- c(left = -73, bottom = 45, right = -65, top = 49)
 
 # to draw the zoom in frame on the zoom out map
 rect_zoom <- data.frame(t(data.frame(frame_map_zoom_in)))
@@ -108,28 +112,72 @@ map_out <- get_stamenmap(frame_map_zoom_out, zoom = 4, maptype = "toner-lite") %
                                   x = NULL, y = NULL),
             fill = rgb(0, 0, 0, 0.2), colour = "black") +
   #geom_label_repel(data = sites, aes(x = lon, y = lat, label = names), size = 8) +
-  labs(x = "Longitude", y = "Latitude", title = "A") +
+  labs(x = "Longitude", y = "Latitude") + #, title = "A") +
 theme(strip.text = element_text(size = 12), axis.text=element_text(size=12, face = "bold"),
-        axis.title=element_text(size=12)) +
-geom_segment(data=arrowA, aes(x=x1, y=y1, xend=x2, yend=y2), 
-         arrow=arrow(ends="first"), colour="black", lineend = "round") 
-# the map with zoom in
-map_in <- get_stamenmap(frame_map_zoom_in, zoom = 8, maptype = "toner-lite") %>% # toner-lite
-  ggmap() +
-  geom_label_repel(data = sites, aes(x = lon, y = lat, label = names), size = 5, nudge_x = 1.5,  nudge_y = 0.01, box.padding = 1.001, label.padding = 0.25, segment.linetype = 3) +
- geom_point(aes(x = lon, y = lat), data = sites, size = 2) +
-  labs(x = "Longitude", y = "Latitude", title = "B") +
-theme(strip.text = element_text(size = 12), axis.text=element_text(size=10, face = "bold"),
-        axis.title=element_text(size=12)) 
-map_in
+        axis.title=element_text(size=12), #axis.line = element_line(colour = "black", 
+                    # size = 0.5, linetype= "solid"), 
+      axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(), panel.border = element_rect(colour = "black", fill=NA, size=0.25)) #+
+ #geom_segment(data=arrowA, aes(x=x1, y=y1, xend=x2, yend=y2), 
+  #       arrow=arrow(), lineend = "round") + 
+ #geom_segment(data=arrowB, aes(x=x1, y=y1, xend=x2, yend=y2), 
+  #       arrow=arrow(ends="first"), colour="black", lineend = "round") 
+map_out
+
 ```
 
 ```{r}
-options(repr.plot.width = 10, repr.plot.height = 3)
-maps_ <- map_out +  map_in 
-maps_  
-ggsave("figures/site_map.png", plot = maps_, width = 10, height = 3, dpi = 1200)
+options(repr.plot.width = 6, repr.plot.height = 3)
+par(mar = c(4, 4, 0.1, 0.1)) 
+
+# the map with zoom in
+map_in <- get_stamenmap(frame_map_zoom_in, zoom = 8, maptype = "toner-lite") %>% # toner-lite
+  ggmap() +
+  geom_label_repel(data = sites, aes(x = lon, y = lat, label = names), size = 2, nudge_x = 1.5,  nudge_y = 0.01, box.padding = 1.001, label.padding = 0.25, segment.linetype = 3) +
+ geom_point(aes(x = lon, y = lat), data = sites, size = 0.5) +
+  labs(x = "Longitude", y = "Latitude") + #, title = "B") +
+theme(strip.text = element_text(size = 8), axis.text=element_text(size=8), # face = "bold"
+        axis.title=element_text(size=8), panel.border = element_rect(colour = "black", fill=NA, size= 0.5))
+     #axis.line = element_line(colour = "black", 
+                     # size = 0.2, linetype = "solid"))
+map_in
+
 ```
+
+```{r}
+options(repr.plot.width = 6, repr.plot.height = 3)
+maps_ <- map_out +  map_in 
+maps_ 
+
+```
+
+```{r}
+options(repr.plot.width = 6, repr.plot.height = 12)
+map2 <- map_out + inset_element(map_in, right = 1,
+                   bottom = -0.4, 
+                   left = 0.13,
+
+```
+
+```{r}
+library(grid)
+map <- map_in +
+    inset(ggplotGrob(map_out), xmin = -69, xmax = -65, ymin = 41, ymax = 50) #+
+    #inset(ggplotGrob(p_hawaii), xmin = -66.5, xmax = -55.5,
+map
+ggsave("figures/site_map.png", plot = map, width = 5, height = 3, dpi = 1200)
+```
+
+```{top = 2.35)}
+map2
+ggsave("figures/site_map2.png", plot = map2, width = 10, height = 6, dpi = 1200)
+
+```
+
+`{ggsave("figures/site_map.png", plot = maps_, width = 10, height = 3, dpi = 1200)}`
 
 ## Monthly weather data (2008-2018) at Lemieux, Quebec (46° 09′ 56″ N 72° 19′ 28″ W), for experimental sites (Gouvernement du Canada, 2018)
 
@@ -219,7 +267,7 @@ C_over_N_meanSD
 Boxplot of $k_1$ for different N dosages per litter.
 
 ```{r}
-options(repr.plot.width = 10, repr.plot.height = 8)
+options(repr.plot.width = 6, repr.plot.height = 4)
 New.labs <- c("Site/10", "Site/45", "Site/9", "Site/A9") # Change labels 
 names(New.labs) <- c("10", "45", "9", "A9")
 ggplot(data = df,
@@ -412,7 +460,7 @@ k_tbi_gg
 The `k_tbi_gg` table is now set up for the plot.
 
 ```{r}
-options(repr.plot.width = 10, repr.plot.height = 4)
+options(repr.plot.width = 6, repr.plot.height = 3)
 plot_k_tbi_model <- k_tbi_gg %>%
   filter(variable != "Intercept") %>%
   ggplot(aes(x = est., y = variable)) +
@@ -861,7 +909,7 @@ names(data_label)
 ```
 
 ```{r}
-options(repr.plot.width = 8, repr.plot.height = 8)
+options(repr.plot.width = 5, repr.plot.height = 5)
 plot <- ggplot(data_label, aes(x = `time`, y = `mean_rate_weight_loss`, group = `Tea type`)) +
 geom_line() +
 geom_errorbar(aes(ymin=`mean_rate_weight_loss`- `sd_rate_weight_loss`, ymax=`mean_rate_weight_loss` + 
@@ -1121,7 +1169,7 @@ names(fractal_biochemical_kinetics)
 ```
 
 ```{r}
-options(repr.plot.width = 8, repr.plot.height = 7)
+options(repr.plot.width = 5, repr.plot.height = 4)
 MeanSD_fractal_biochemical %>%
   ggplot(aes(x = `mean_log.T`, y  = `mean_log.K`)) +
   geom_smooth(method = "lm", se = FALSE, colour="black") +
