@@ -19,4 +19,6 @@ were reduced by fractal coefficients of 0.6 for green tea and 0.4 for rooibos te
 mechanisms building up with time in the tea bags. While the computation of the TBI stabilization
 factor may be biased because the green tea was not fully decomposed, fractal kinetics could be used
 as additional index to compare agroecosystems.   
-**Keywords:** carbon flux; fractal kinetics; nitrogen fertilization; Tea Bag Index; podzols; gleysols
+**Keywords:** carbon flux; fractal kinetics; nitrogen fertilization; Tea Bag Index; podzols; gleysols    
+
+**Link:** https://www.mdpi.com/2571-8789/5/3/44
